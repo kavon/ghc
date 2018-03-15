@@ -2793,7 +2793,7 @@ See Invariant 2a of Note [Invariants on join points] in CoreSyn
 ************************************************************************
 -}
 
-markMany, markInsideLam, markNonTailCalled :: OccInfo -> OccInfo
+markMany, markInsideLam, markNonTailCalled, markSelfTailCalled :: OccInfo -> OccInfo
 
 markMany IAmDead = IAmDead
 markMany occ     = ManyOccs { occ_tail = occ_tail occ }
@@ -2803,6 +2803,9 @@ markInsideLam occ             = occ
 
 markNonTailCalled IAmDead = IAmDead
 markNonTailCalled occ     = occ { occ_tail = NoTailCallInfo }
+
+markSelfTailCalled IAmDead = IAmDead
+markSelfTailCalled occ     = occ { occ_tail = SelfTailCalled }
 
 addOccInfo, orOccInfo :: OccInfo -> OccInfo -> OccInfo
 

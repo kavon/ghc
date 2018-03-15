@@ -936,6 +936,7 @@ notOneBranch = False
 
 -----------------
 data TailCallInfo = AlwaysTailCalled JoinArity -- See Note [TailCallInfo]
+                  | SelfTailCalled  -- See Note [TailCallInfo]
                   | NoTailCallInfo
   deriving (Eq)
 
@@ -950,10 +951,12 @@ zapOccTailCallInfo occ       = occ { occ_tail = NoTailCallInfo }
 isAlwaysTailCalled :: OccInfo -> Bool
 isAlwaysTailCalled occ
   = case tailCallInfo occ of AlwaysTailCalled{} -> True
+                             SelfTailCalled     -> False
                              NoTailCallInfo     -> False
 
 instance Outputable TailCallInfo where
   ppr (AlwaysTailCalled ar) = sep [ text "Tail", int ar ]
+  ppr SelfTailCalled        = text "SelfTail"
   ppr _                     = empty
 
 -----------------
@@ -1005,6 +1008,7 @@ instance Outputable OccInfo where
 
 pprShortTailCallInfo :: TailCallInfo -> SDoc
 pprShortTailCallInfo (AlwaysTailCalled ar) = char 'T' <> brackets (int ar)
+pprShortTailCallInfo SelfTailCalled        = text "ST"
 pprShortTailCallInfo NoTailCallInfo        = empty
 
 {-
@@ -1037,6 +1041,26 @@ point can also be invoked from other join points, not just from case branches:
 
 Here both 'j1' and 'j2' will get marked AlwaysTailCalled, but j1 will get
 ManyOccs and j2 will get `OneOcc { occ_one_br = True }`.
+
+A SelfTailCalled binding may be involved in a non-tail call outside of
+its body, but is only ever tail-called within its body:
+
+  let f x = ... h (g y) ...
+      g x = ... g z {- tail call -} ...
+
+Thus, the SelfTailCalled bindings are superset of the AlwaysTailCalled bindings
+and do NOT satisfy the criterion of being a join point. We can, however, try to
+make the self tail calls cheaper by wrapping its body in a join point, like so:
+
+  let f x = ... h (g y) ...
+      g x = joinrec j x =
+              ... jump j z ...
+            in
+              jump j x
+
+This also should open up further optimization opprotunities, such as inlining g,
+since it is no longer recursive.
+
 
 ************************************************************************
 *                                                                      *
