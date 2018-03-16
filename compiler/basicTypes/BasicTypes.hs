@@ -72,7 +72,7 @@ module BasicTypes(
         OneBranch, oneBranch, notOneBranch,
         InterestingCxt,
         TailCallInfo(..), tailCallInfo, zapOccTailCallInfo,
-        isAlwaysTailCalled,
+        isAlwaysTailCalled, isSelfTailCalled,
 
         EP(..),
 
@@ -907,9 +907,10 @@ noOccInfo = ManyOccs { occ_tail = NoTailCallInfo }
 
 -- only perserve tail info if it is self tail.
 noInfoButSelfTail :: OccInfo -> OccInfo
-noInfoButSelfTail occ = case tailCallInfo occ of
-        SelfTailCalled -> noOccInfo { occ_tail = SelfTailCalled }
-        _              -> noOccInfo
+noInfoButSelfTail occ =
+    if isSelfTailCalled occ
+        then noOccInfo { occ_tail = SelfTailCalled }
+        else noOccInfo
 
 isManyOccs :: OccInfo -> Bool
 isManyOccs ManyOccs{} = True
@@ -957,8 +958,12 @@ zapOccTailCallInfo occ       = occ { occ_tail = NoTailCallInfo }
 isAlwaysTailCalled :: OccInfo -> Bool
 isAlwaysTailCalled occ
   = case tailCallInfo occ of AlwaysTailCalled{} -> True
-                             SelfTailCalled     -> False
-                             NoTailCallInfo     -> False
+                             _                  -> False
+
+isSelfTailCalled :: OccInfo -> Bool
+isSelfTailCalled occ
+  = case tailCallInfo occ of SelfTailCalled -> True
+                             _ -> False
 
 instance Outputable TailCallInfo where
   ppr (AlwaysTailCalled ar) = sep [ text "Tail", int ar ]
