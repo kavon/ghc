@@ -66,7 +66,7 @@ module BasicTypes(
 
         OccInfo(..), noOccInfo, seqOccInfo, zapFragileOcc, isOneOcc,
         isDeadOcc, isStrongLoopBreaker, isWeakLoopBreaker, isManyOccs,
-        strongLoopBreaker, weakLoopBreaker,
+        strongLoopBreaker, weakLoopBreaker, noInfoButSelfTail,
 
         InsideLam, insideLam, notInsideLam,
         OneBranch, oneBranch, notOneBranch,
@@ -904,6 +904,12 @@ See OccurAnal Note [Weak loop breakers]
 
 noOccInfo :: OccInfo
 noOccInfo = ManyOccs { occ_tail = NoTailCallInfo }
+
+-- only perserve tail info if it is self tail.
+noInfoButSelfTail :: OccInfo -> OccInfo
+noInfoButSelfTail occ = case tailCallInfo occ of
+        SelfTailCalled -> noOccInfo { occ_tail = SelfTailCalled }
+        _              -> noOccInfo
 
 isManyOccs :: OccInfo -> Bool
 isManyOccs ManyOccs{} = True

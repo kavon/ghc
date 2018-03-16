@@ -48,6 +48,7 @@ import Util
 import Outputable
 import Data.List
 import Control.Arrow    ( second )
+import Data.Maybe ( isNothing )
 
 {-
 ************************************************************************
@@ -2567,6 +2568,18 @@ flattenUsageDetails ud
   = ud { ud_env = mapUFM_Directly (doZappingByUnique ud) (ud_env ud) }
       `alterZappedSets` const emptyVarEnv
 
+
+-- NOTE(kavon): wrote my own because this UsageDetails / Occ API is very hard to use.
+-- we can get rid of this specialized version later.
+-- unzaps the var, if needed, and updates the occ.
+setSelfTailCalled :: UsageDetails -> Var -> UsageDetails
+setSelfTailCalled ud v
+    = ud { ud_z_no_tail = (ud_z_no_tail ud) `delVarEnv` v
+         , ud_env       = alterVarEnv updateTail (ud_env ud) v }
+    where
+        updateTail (Just old) = Just (markSelfTailCalled old)
+        updateTail Nothing = panic "setSelfTailCalled"
+
 -------------------
 -- See Note [Adjusting right-hand sides]
 adjustRhsUsage :: Maybe JoinArity -> RecFlag
@@ -2655,7 +2668,8 @@ tagRecBinders lvl body_uds triples
      --    join-point-hood decision
      rhs_udss' = map adjust triples
      adjust (bndr, rhs_uds, rhs_bndrs)
-       = adjustRhsUsage mb_join_arity Recursive rhs_bndrs rhs_uds
+       = WARN(tail_in_rhs, text "tagRecBinders: Binder is self tail called: " <+> ppr bndr)
+           rhs_uds2
        where
          -- Can't use willBeJoinId_maybe here because we haven't tagged the
          -- binder yet (the tag depends on these adjustments!)
@@ -2667,6 +2681,15 @@ tagRecBinders lvl body_uds triples
            | otherwise
            = ASSERT(not will_be_joins) -- Should be AlwaysTailCalled if
              Nothing                   -- we are making join points!
+
+         -- an individual binder can be marked as self tail called.
+         tail_in_rhs = isNothing mb_join_arity &&
+                       decideJoinPointHood NotTopLevel rhs_uds [bndr]
+
+         rhs_uds1 = adjustRhsUsage mb_join_arity Recursive rhs_bndrs rhs_uds
+
+         rhs_uds2 | tail_in_rhs = setSelfTailCalled rhs_uds1 bndr
+                  | otherwise = rhs_uds1
 
      -- 3. Compute final usage details from adjusted RHS details
      adj_uds   = body_uds +++ combineUsageDetailsList rhs_udss'
@@ -2685,7 +2708,7 @@ setBinderOcc occ_info bndr
   | isTyVar bndr      = bndr
   | isExportedId bndr = if isManyOccs (idOccInfo bndr)
                           then bndr
-                          else setIdOccInfo bndr noOccInfo
+                          else setIdOccInfo bndr (noInfoButSelfTail occ_info)
             -- Don't use local usage info for visible-elsewhere things
             -- BUT *do* erase any IAmALoopBreaker annotation, because we're
             -- about to re-generate it and it shouldn't be "sticky"
@@ -2833,4 +2856,6 @@ orOccInfo a1 a2 = ASSERT( not (isDeadOcc a1 || isDeadOcc a2) )
 andTailCallInfo :: TailCallInfo -> TailCallInfo -> TailCallInfo
 andTailCallInfo info@(AlwaysTailCalled arity1) (AlwaysTailCalled arity2)
   | arity1 == arity2 = info
+andTailCallInfo SelfTailCalled _ = SelfTailCalled
+andTailCallInfo _ SelfTailCalled = SelfTailCalled
 andTailCallInfo _ _  = NoTailCallInfo
