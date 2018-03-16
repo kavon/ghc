@@ -2677,7 +2677,7 @@ tagRecBinders lvl body_uds triples
      --    join-point-hood decision
      rhs_udss' = map adjust triples
      adjust (bndr, rhs_uds, rhs_bndrs)
-       = WARN(tail_in_rhs, text "tagRecBinders: Binder is self tail called: " <+> ppr bndr)
+       = -- WARN(tail_in_rhs, text "tagRecBinders: Binder is self tail called: " <+> ppr bndr) -- TODO(kavon): remove me
            rhs_uds2
        where
          -- Can't use willBeJoinId_maybe here because we haven't tagged the
